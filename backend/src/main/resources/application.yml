@@ -1,0 +1,84 @@
+server:
+  port: 8080
+
+spring:
+  # 默认用 MySQL（docker-compose 一键启动，或本地 MySQL 8）；
+  # 无 MySQL 时可临时用 H2 内存库：-Dspring.profiles.active=h2
+  # 测试固定走 h2（见 MedicalApplicationTests 的 @ActiveProfiles）。
+  profiles:
+    active: mysql
+  application:
+    name: yunzhongyi-medical-system
+
+  # ---------- H2 内存库（仅 h2 profile / 测试时用） ----------
+  datasource:
+    url: jdbc:h2:mem:medical;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_UPPER=false
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  # ---------- 建表 + 种子数据 ----------
+  sql:
+    init:
+      mode: always
+      encoding: UTF-8
+      schema-locations: classpath:schema.sql
+      data-locations: classpath:data.sql
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+      id-type: auto
+
+logging:
+  level:
+    com.yunzhongyi: INFO
+
+# ---------- 登录鉴权 ----------
+app:
+  auth:
+    # 接口拦截总开关：默认开启；h2 测试 profile 默认关闭（历史模块测试不带 token），
+    # AuthTests 用 @TestPropertySource 显式开启验证
+    enabled: true
+    # JWT 密钥：生产务必用环境变量 AUTH_JWT_SECRET 换成足够长的随机值（HS256 至少 32 字节）
+    jwt-secret: ${AUTH_JWT_SECRET:yunzhongyi-medical-dev-secret-key-change-in-production-please-use-long-random-secret}
+    # token 有效期（小时），默认 8
+    jwt-expire-hours: 8
+    # 同一账号连续失败 5 次后锁定 15 分钟
+    max-failures: 5
+    lock-minutes: 15
+
+---
+# ============ H2 内存库（测试） ============
+spring:
+  config:
+    activate:
+      on-profile: h2
+app:
+  auth:
+    # 测试 profile 默认关闭接口拦截：历史 31 个模块的 MockMvc 测试不带 token；
+    # 鉴权本身由 AuthTests（app.auth.enabled=true）覆盖验证
+    enabled: false
+
+---
+# ============ MySQL 环境（docker-compose / 生产） ============
+spring:
+  config:
+    activate:
+      on-profile: mysql
+  datasource:
+    url: jdbc:mysql://localhost:3306/medical?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: medical
+    password: medical123
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema-mysql.sql
+      data-locations: classpath:data.sql
